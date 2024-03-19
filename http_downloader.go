@@ -98,8 +98,9 @@ func (h *HttpDownloader) parallelDownload(filename string, content_length int, m
 	}()
 
 	for resp := range responses {
-		h.writer.write([]byte(resp.body), resp.offset, filename)
+		h.writer.Write([]byte(resp.body), resp.offset, filename)
 	}
+	h.writer.Close()
 
 	return nil
 }
@@ -111,7 +112,8 @@ func (h *HttpDownloader) singleDownload(filename string) error {
 		return err
 	}
 	body := parseHTTPResponse(string(response)).Body
-	h.writer.write([]byte(body), 0, filename)
+	h.writer.Write([]byte(body), 0, filename)
+	h.writer.Close()
 	return nil
 }
 
