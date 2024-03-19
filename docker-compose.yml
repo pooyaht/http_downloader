@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  http_downloader:
+    container_name: http_downloader
+    build:
+      context: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./data:/app/data
+    networks:
+      app_network:
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    volumes:
+      - /tmp/nginx_data:/usr/share/nginx/html:ro
+    networks:
+      app_network:
+        ipv4_address: 10.11.0.10
+
+networks:
+  app_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.11.0.0/16
