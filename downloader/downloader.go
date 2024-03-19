@@ -1,4 +1,4 @@
-package main
+package downloader
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/pooyaht/http_downloader/writer"
 )
 
 const (
@@ -19,7 +21,7 @@ const (
 
 type HttpDownloader struct {
 	server_addr *syscall.SockaddrInet4
-	writer      *FileWriter
+	writer      *writer.FileWriter
 }
 
 func NewHttpDownloader(server_ip net.IP, port int) *HttpDownloader {
@@ -27,7 +29,7 @@ func NewHttpDownloader(server_ip net.IP, port int) *HttpDownloader {
 		Port: port,
 		Addr: [4]byte(server_ip.To4()),
 	}
-	writer := newFileWriter("data")
+	writer := writer.NewFileWriter("data")
 	return &HttpDownloader{
 		server_addr: server_addr,
 		writer:      writer,

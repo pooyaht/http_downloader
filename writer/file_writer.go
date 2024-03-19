@@ -1,4 +1,4 @@
-package main
+package writer
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ type FileWriter struct {
 	file       *os.File
 }
 
-func newFileWriter(store_path string) *FileWriter {
+func NewFileWriter(store_path string) *FileWriter {
 	return &FileWriter{store_path: store_path, mu: sync.Mutex{}, file: nil}
 }
 

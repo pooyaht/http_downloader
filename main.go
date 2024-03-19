@@ -5,6 +5,8 @@ import (
 	"net"
 	"os"
 	"strconv"
+
+	"github.com/pooyaht/http_downloader/downloader"
 )
 
 func main() {
@@ -23,7 +25,7 @@ func main() {
 	filename := args[2]
 
 	server_ip := net.ParseIP(target_server_ip)
-	downloader := NewHttpDownloader(server_ip, port)
+	downloader := downloader.NewHttpDownloader(server_ip, port)
 
 	err = downloader.Download(filename)
 	if err != nil {
