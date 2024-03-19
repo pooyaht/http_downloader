@@ -2,6 +2,7 @@ package writer
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -11,56 +12,67 @@ type FileWriter struct {
 	store_path string
 	mu         sync.Mutex
 	file       *os.File
+	logger     *slog.Logger
 }
 
-func NewFileWriter(store_path string) *FileWriter {
-	return &FileWriter{store_path: store_path, mu: sync.Mutex{}, file: nil}
+func NewFileWriter(store_path string, logger *slog.Logger) *FileWriter {
+	return &FileWriter{store_path: store_path, mu: sync.Mutex{}, file: nil, logger: logger}
 }
 
-func (w *FileWriter) createFile(filename string) {
+func (w *FileWriter) createFile(filename string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	dir, _ := path.Split(filename)
 	err := os.MkdirAll(w.store_path+"/"+dir, 0755)
 	if err != nil {
-		fmt.Println("Error creating directory: ", err)
-		return
+		return err
 	}
 
 	f, err := os.Create(w.store_path + "/" + filename)
 	if err != nil {
-		fmt.Println("Error creating file: ", err)
-		return
+		return err
 	}
 
 	w.file = f
+	return nil
 }
 
 func (w *FileWriter) Write(data []byte, offset int64, filename string) {
+	var errors []error
 	if w.file == nil {
-		w.createFile(filename)
+		err := w.createFile(filename)
+		if err != nil {
+			errors = append(errors, err)
+		}
 	}
 
 	_, err := w.file.Seek(offset, 0)
 	if err != nil {
-		fmt.Println("Error seeking to offset: ", err)
-		return
+		errors = append(errors, err)
 	}
 
 	_, err = w.file.Write(data)
 	if err != nil {
-		fmt.Println("Error writing to file: ", err)
-		return
+		errors = append(errors, err)
 	}
+	if len(errors) > 0 {
+		for _, err := range errors {
+			w.logger.Error(fmt.Sprintf("Error writing to file: %s", err))
+		}
+		w.logger.Error("Write failed; exiting ...")
+		os.Exit(1)
+	}
+
 }
 
 func (w *FileWriter) Close() {
 	err := w.file.Sync()
 	if err != nil {
-		fmt.Println("Error syncing file: ", err)
+		w.logger.Error(fmt.Sprintf("Error syncing file: %s", err))
+		return
 	}
 
-	fmt.Println("Write Completed")
+	w.logger.Info("Write completed")
 	w.file.Close()
 }

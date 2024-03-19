@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 
@@ -23,9 +24,10 @@ func main() {
 	}
 
 	filename := args[2]
-	downloader := downloader.NewHttpDownloader(target_server_ip, port)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	downloader := downloader.NewHttpDownloader(target_server_ip, port, logger)
 	err = downloader.Download(filename)
 	if err != nil {
-		fmt.Println("Error: ", err)
+		logger.Error(fmt.Sprintf("Error downloading file: %s", err))
 	}
 }

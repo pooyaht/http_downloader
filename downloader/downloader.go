@@ -3,6 +3,7 @@ package downloader
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"os"
@@ -24,14 +25,16 @@ type HttpDownloader struct {
 	server_addr string
 	server_port int
 	writer      *writer.FileWriter
+	logger      *slog.Logger
 }
 
-func NewHttpDownloader(server_addr string, port int) *HttpDownloader {
-	writer := writer.NewFileWriter(DOWNLOAD_PATH)
+func NewHttpDownloader(server_addr string, port int, logger *slog.Logger) *HttpDownloader {
+	writer := writer.NewFileWriter(DOWNLOAD_PATH, logger)
 	return &HttpDownloader{
 		server_addr: server_addr,
 		server_port: port,
 		writer:      writer,
+		logger:      logger,
 	}
 }
 
@@ -52,8 +55,10 @@ func (h *HttpDownloader) Download(filename string) error {
 
 	num_workers := int(math.Min(float64(max_chunks), float64(MAX_WORKERS)))
 	if parsed_response.Headers["Accept-Ranges"] == "bytes" && num_workers > 1 {
+		h.logger.Info(fmt.Sprintf("Parallel download using %d workers", num_workers))
 		return h.parallelDownload(filename, content_length, num_workers)
 	} else {
+		h.logger.Info("Single download")
 		return h.singleDownload(filename)
 	}
 }
@@ -68,8 +73,8 @@ func (h *HttpDownloader) parallelDownload(filename string, content_length int, m
 	responses := make(chan chanResponse, max_workers)
 	chunk_size := int(math.Ceil(float64(content_length) / float64(max_workers)))
 
+	wg.Add(max_workers)
 	for i := 0; i < max_workers; i++ {
-		wg.Add(1)
 		go func(chunk_no int) {
 			defer wg.Done()
 
@@ -84,7 +89,7 @@ func (h *HttpDownloader) parallelDownload(filename string, content_length int, m
 			})
 			response, err := h.sendRequest(request)
 			if err != nil {
-				fmt.Println("Error:", err)
+				h.logger.Error(fmt.Sprintf("Error downloading chunk %d: %s", chunk_no, err))
 				return
 			}
 
@@ -181,9 +186,10 @@ func (h *HttpDownloader) sendRequestUtil(socket_fd int, request []byte) ([]byte,
 	if err != nil {
 		return nil, os.NewSyscallError("Write", err)
 	}
+	h.logger.Info(fmt.Sprintf("Wrote to socket %d request: %s", socket_fd, request))
 	response, err := h.readResponse(socket_fd)
 	if err != nil {
-		fmt.Println("Error", err)
+		h.logger.Error(fmt.Sprintf("Error reading response corresponding to request: %s , error: %s", request, err))
 	}
 	return response, nil
 }
@@ -191,7 +197,7 @@ func (h *HttpDownloader) sendRequestUtil(socket_fd int, request []byte) ([]byte,
 func (h *HttpDownloader) readResponse(socket_fd int) ([]byte, error) {
 	buf := make([]byte, 4096)
 	var response bytes.Buffer
-	fmt.Println("[", socket_fd, "] Downloading")
+	h.logger.Info(fmt.Sprintf("Reading from socket %d", socket_fd))
 
 	timeout := syscall.Timeval{Sec: 10, Usec: 0}
 	err := syscall.SetsockoptTimeval(socket_fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &timeout)
@@ -199,10 +205,16 @@ func (h *HttpDownloader) readResponse(socket_fd int) ([]byte, error) {
 		return nil, os.NewSyscallError("SetsockoptTimeval", err)
 	}
 
+	var last_num_bytes_read int
 	for {
 		n, err := syscall.Read(socket_fd, buf)
+		//dirty hack to prevent keep-alive connections from waiting
 		if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
-			fmt.Println("[", socket_fd, "] Timeout")
+			if last_num_bytes_read < len(buf) {
+				h.logger.Info(fmt.Sprintf("Socket: [ %d ] read Completed", socket_fd))
+				break
+			}
+			h.logger.Info(fmt.Sprintf("Socket: [ %d ] Timeout", socket_fd))
 			break
 		}
 		if err != nil {
@@ -211,9 +223,9 @@ func (h *HttpDownloader) readResponse(socket_fd int) ([]byte, error) {
 		if n == 0 {
 			break
 		}
+		last_num_bytes_read = n
 		response.Write(buf[:n])
 	}
-	fmt.Println("[", socket_fd, "] Complete")
 	return response.Bytes(), nil
 }
 
