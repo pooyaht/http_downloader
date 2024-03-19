@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 
@@ -22,11 +21,9 @@ func main() {
 		fmt.Println("Error: ", err)
 		os.Exit(1)
 	}
+
 	filename := args[2]
-
-	server_ip := net.ParseIP(target_server_ip)
-	downloader := downloader.NewHttpDownloader(server_ip, port)
-
+	downloader := downloader.NewHttpDownloader(target_server_ip, port)
 	err = downloader.Download(filename)
 	if err != nil {
 		fmt.Println("Error: ", err)

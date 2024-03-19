@@ -17,21 +17,20 @@ import (
 const (
 	DOWNLOAD_CHUNK_SIZE = 1024 * 1024 * 16
 	MAX_WORKERS         = 8
+	DOWNLOAD_PATH       = "data"
 )
 
 type HttpDownloader struct {
-	server_addr *syscall.SockaddrInet4
+	server_addr string
+	server_port int
 	writer      *writer.FileWriter
 }
 
-func NewHttpDownloader(server_ip net.IP, port int) *HttpDownloader {
-	server_addr := &syscall.SockaddrInet4{
-		Port: port,
-		Addr: [4]byte(server_ip.To4()),
-	}
-	writer := writer.NewFileWriter("data")
+func NewHttpDownloader(server_addr string, port int) *HttpDownloader {
+	writer := writer.NewFileWriter(DOWNLOAD_PATH)
 	return &HttpDownloader{
 		server_addr: server_addr,
+		server_port: port,
 		writer:      writer,
 	}
 }
@@ -155,8 +154,7 @@ func (h *HttpDownloader) createRequest(method string, resource string, headers m
 		headers = make(map[string]string)
 	}
 
-	// TODO remove hardcoded address
-	headers["Host"] = fmt.Sprintf("%s:%d", "127.0.0.1", h.server_addr.Port)
+	headers["Host"] = fmt.Sprintf("%s:%d", h.server_addr, h.server_port)
 	for k, v := range headers {
 		request = append(request, []byte(k+": "+v+"\r\n")...)
 	}
@@ -226,7 +224,12 @@ func (h *HttpDownloader) socketContext(callback func(fd int) error) error {
 	}
 	defer syscall.Close(fd)
 
-	err = syscall.Connect(fd, h.server_addr)
+	server_ip := net.ParseIP(h.server_addr)
+	server_addr := &syscall.SockaddrInet4{
+		Port: h.server_port,
+		Addr: [4]byte(server_ip.To4()),
+	}
+	err = syscall.Connect(fd, server_addr)
 	if err != nil {
 		return os.NewSyscallError("Connect", err)
 	}
